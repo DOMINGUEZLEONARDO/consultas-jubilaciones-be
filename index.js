@@ -3,29 +3,24 @@ const fs = require("fs/promises");
 
 (async () => {
   let browser;
+
   try {
-    // Iniciar el navegador
-    browser = await puppeteer.launch({
-      headless: false,
-    });
+    browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
-
-    // Leer la lista de códigos desde el archivo txt
     const codigos = await fs.readFile("expedientes.txt", "utf-8");
-    const codigosArray = codigos.split("\n");
+    const codigosArray = codigos
+      .split("\n")
+      .filter((linea) => linea.trim() !== "");
+    const codigosLimpios = codigosArray.map((codigo) => codigo.trim());
+    const objeto = {};
 
-    // Iterar sobre los códigos
-    for (const codigo of codigosArray) {
-      console.log("Consultando expediente:", codigo);
-
-      // Navegar a la página
+    for (const codigo of codigosLimpios) {
       await page.goto(
         "https://www.anses.gob.ar/consultas/consulta-de-expediente"
       );
 
-      // Esperar el selector, si no se encuentra, continuar con el siguiente expediente
       try {
-        await page.waitForSelector("#edit-nro-expediente", { timeout: 5000 });
+        await page.waitForSelector("#edit-nro-expediente", { timeout: 3000 });
       } catch (error) {
         console.error(
           `El selector '#edit-nro-expediente' no se encontró en la página. Pasando al siguiente expediente.`
@@ -33,57 +28,60 @@ const fs = require("fs/promises");
         continue;
       }
 
-      // Insertar el código en el campo de búsqueda y enviar la consulta
       await page.type("#edit-nro-expediente", codigo);
       await page.click("#edit-submit");
 
-      try{
-        const waitSelector = await page.waitForSelector("#edit-nro-expediente", { timeout: 5000 });
-        console.log(waitSelector)
-        const respuestaElement = await page.$('.constancia-inner');
-        console.log('respuestaElement', respuestaElement)
-        const respuesta = await respuestaElement.evaluate(element => element.textContent.trim());
-
-      console.log(`codigo: ${codigo}, Respuesta: ${respuesta}`);
-      }catch(error) {
-        console.error(`este Expediente no tiene tramite iniciado ${codigo} `);
-      }
-
-    
-    
-
-      // Pausa opcional entre consultas para evitar bloqueos
       await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      try {
+        await page.waitForSelector("[class=container]", { timeout: 5000 });
+        const small = await page.$eval(
+          "div.constancia-inner small",
+          (element) => element.textContent.trim()
+        );
+        const dni = small.split(" ")[2];
+        const estadoRespuesta = await page.$eval("div.estado h4", (element) =>
+          element.textContent.trim()
+        );
+        let estado;
+        if (
+          estadoRespuesta.startsWith(
+            "Tu trámite fue resuelto en forma favorable"
+          )
+        ) {
+          estado = "Favorable";
+        } else if (
+          estadoRespuesta.startsWith(
+            "Tu trámite fue resuelto en forma desfavorable"
+          )
+        ) {
+          estado = "Desfavorable";
+        } else if (
+          estadoRespuesta.startsWith("Tu trámite se encontraba mal caratulado")
+        ) {
+          estado = "Cambio de carátula";
+        } else if (estadoRespuesta.startsWith("Es necesario que aportes documentación")){
+          estado = "Iniciado / Requiere documentación"
+        }
+         else {
+          estado = "Iniciado";
+        }
+
+        if (objeto[dni]) {
+          objeto[dni] = { ...objeto[dni], [codigo]: estado };
+        } else {
+          objeto[dni] = { [codigo]: estado };
+        }
+      } catch (error) {
+        console.error(` este Expediente no tiene tramite iniciado ${codigo} `);
+      }
     }
+    await fs.writeFile("resultados.json", JSON.stringify(objeto, null));
   } catch (error) {
     console.error("Error:", error);
   } finally {
-    // Cerrar el navegador al finalizar
     if (browser) {
       await browser.close();
     }
   }
 })();
-
-// este funciona
-// const puppeteer = require("puppeteer");
-// const fs = require("fs/promises");
-
-// (async () => {
-//   // const url = 'https://www.anses.gob.ar/consultas/consulta-de-expediente'
-//   const browser = await puppeteer.launch({
-//     headless: false,
-//   });
-//   const page = await browser.newPage();
-
-//   const pagina = await page.goto(
-//     "https://www.anses.gob.ar/consultas/consulta-de-expediente"
-//   );
-//   console.log(pagina);
-
-//   await page.waitForSelector("#edit-nro-expediente");
-//   await page.type('#edit-nro-expediente', "1233213214");
-
-// const valorCampo = await page.$eval('#edit-nro-expediente', input => input.value);
-// console.log('Valor del campo de entrada:', valorCampo);
-// })();
