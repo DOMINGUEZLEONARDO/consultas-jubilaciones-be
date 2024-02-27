@@ -5,7 +5,7 @@ const fs = require("fs/promises");
   let browser;
 
   try {
-    browser = await puppeteer.launch({ headless: false });
+    browser = await puppeteer.launch({headless: false,});
     const page = await browser.newPage();
     const codigos = await fs.readFile("expedientes.txt", "utf-8");
     const codigosArray = codigos
@@ -18,9 +18,10 @@ const fs = require("fs/promises");
       await page.goto(
         "https://www.anses.gob.ar/consultas/consulta-de-expediente"
       );
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
       try {
-        await page.waitForSelector("#edit-nro-expediente", { timeout: 3000 });
+        await page.waitForSelector("#edit-nro-expediente", { timeout: 5000 });
       } catch (error) {
         console.error(
           `El selector '#edit-nro-expediente' no se encontró en la página. Pasando al siguiente expediente.`
@@ -31,7 +32,7 @@ const fs = require("fs/promises");
       await page.type("#edit-nro-expediente", codigo);
       await page.click("#edit-submit");
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
       try {
         await page.waitForSelector("[class=container]", { timeout: 5000 });
@@ -45,9 +46,7 @@ const fs = require("fs/promises");
         );
         let estado;
         if (
-          estadoRespuesta.startsWith(
-            "Tu trámite fue resuelto en forma favorable"
-          )
+          estadoRespuesta.startsWith("Tu trámite fue resuelto en forma favorable")
         ) {
           estado = "Favorable";
         } else if (
